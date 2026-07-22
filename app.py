@@ -100,6 +100,72 @@ if model is not None:
 
     st.divider()
 
+# --- Hourly Load Pattern (B) ---
+st.subheader("Average Load by Hour of Day")
+df["hour"] = df["timestamp"].dt.hour
+df["day_type"] = df["timestamp"].dt.dayofweek.apply(lambda x: "Weekend" if x >= 5 else "Weekday")
+
+hourly = df.groupby(["hour", "day_type"])["load_mw"].mean().reset_index()
+
+fig_hour = go.Figure()
+for day_type, color in [("Weekday", "#1f77b4"), ("Weekend", "#ff7f0e")]:
+    subset = hourly[hourly["day_type"] == day_type]
+    fig_hour.add_trace(go.Scatter(
+        x=subset["hour"],
+        y=subset["load_mw"],
+        name=day_type,
+        mode="lines+markers",
+        line=dict(color=color, width=2),
+        marker=dict(size=5),
+    ))
+fig_hour.update_layout(
+    xaxis=dict(title="Hour of Day", tickmode="linear", tick0=0, dtick=2),
+    yaxis_title="Avg Load (MW)",
+    height=380,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+)
+st.plotly_chart(fig_hour, use_container_width=True)
+
+st.divider()
+
+# --- Seasonal Trend (C) ---
+st.subheader("Monthly Load Distribution")
+df["month"] = df["timestamp"].dt.month
+df["month_name"] = df["timestamp"].dt.strftime("%b")
+MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+monthly_avg = (
+    df.groupby("month")["load_mw"]
+    .agg(["mean", "max", "min"])
+    .reset_index()
+)
+monthly_avg["month_name"] = [MONTH_ORDER[m - 1] for m in monthly_avg["month"]]
+
+fig_month = go.Figure()
+fig_month.add_trace(go.Bar(
+    x=monthly_avg["month_name"],
+    y=monthly_avg["mean"],
+    name="Avg Load",
+    marker_color="#1f77b4",
+))
+fig_month.add_trace(go.Scatter(
+    x=monthly_avg["month_name"],
+    y=monthly_avg["max"],
+    name="Peak Load",
+    mode="lines+markers",
+    line=dict(color="#d62728", dash="dot", width=2),
+    marker=dict(size=6),
+))
+fig_month.update_layout(
+    xaxis=dict(title="Month", categoryorder="array", categoryarray=MONTH_ORDER),
+    yaxis_title="Load (MW)",
+    height=380,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+)
+st.plotly_chart(fig_month, use_container_width=True)
+
+st.divider()
+
 # --- Peak Hour Alert ---
 st.subheader("Peak Hour Alert Simulation")
 threshold = st.slider(
