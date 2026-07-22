@@ -1,51 +1,49 @@
 """
-Generates realistic hourly electricity load data for prototyping.
-Replace with real dataset (e.g. Kaggle 'PJM Hourly Energy Consumption')
-before final submission if possible — note in slide 2 (Insights) either way.
+Processes real PJM East hourly energy consumption data.
+Source: Kaggle — 'PJM Hourly Energy Consumption' (PJME_hourly.csv)
+https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption
+
+Place PJME_hourly.csv in data/ and run this script to generate energy_load.csv.
 """
-import numpy as np
 import pandas as pd
+import numpy as np
+import os
 
-def generate_load_data(start="2023-01-01", periods=24*365*2, freq="h", seed=42):
-    rng = np.random.default_rng(seed)
-    idx = pd.date_range(start=start, periods=periods, freq=freq)
+RAW_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "PJME_hourly.csv")
+OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "energy_load.csv")
 
-    hour = idx.hour
-    dow = idx.dayofweek
-    doy = idx.dayofyear
 
-    # Base load
-    base = 3000
+def process_pjm(raw_path: str = RAW_PATH, out_path: str = OUT_PATH) -> pd.DataFrame:
+    df = pd.read_csv(raw_path, parse_dates=["Datetime"])
+    df = df.rename(columns={"Datetime": "timestamp", "PJME_MW": "load_mw"})
+    df = df.dropna()
+    df = df.drop_duplicates(subset="timestamp")
+    df = df.sort_values("timestamp").reset_index(drop=True)
 
-    # Daily pattern: morning + evening peaks
-    daily = 500 * np.sin((hour - 6) * np.pi / 12) + 700 * np.exp(-((hour - 19) ** 2) / 8)
+    # Time features
+    df["hour"] = df["timestamp"].dt.hour
+    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
+    df["day_of_year"] = df["timestamp"].dt.dayofyear
+    df["month"] = df["timestamp"].dt.month
+    df["week_of_year"] = df["timestamp"].dt.isocalendar().week.astype(int)
 
-    # Weekly pattern: lower on weekends
-    weekly = np.where(dow >= 5, -300, 0)
+    # Lag features
+    df["load_lag_1"] = df["load_mw"].shift(1)
+    df["load_lag_24"] = df["load_mw"].shift(24)
+    df["load_lag_168"] = df["load_mw"].shift(168)
+    df["load_rolling_24"] = df["load_mw"].shift(1).rolling(24).mean()
 
-    # Seasonal pattern: summer AC load + winter heating
-    seasonal = 400 * np.sin((doy - 172) * 2 * np.pi / 365) ** 2 * np.where(
-        (doy > 120) & (doy < 260), 1, 0.3
-    )
+    df = df.dropna().reset_index(drop=True)
 
-    noise = rng.normal(0, 100, size=periods)
-
-    load = base + daily + weekly + seasonal + noise
-    temp = 25 + 10 * np.sin((doy - 172) * 2 * np.pi / 365) + rng.normal(0, 2, periods)
-
-    df = pd.DataFrame({
-        "timestamp": idx,
-        "load_mw": np.round(load, 2),
-        "temperature_c": np.round(temp, 1),
-        "hour": hour,
-        "day_of_week": dow,
-        "is_weekend": (dow >= 5).astype(int),
-        "day_of_year": doy,
-    })
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    df.to_csv(out_path, index=False)
+    print(f"Saved {len(df):,} rows → {out_path}")
     return df
 
+
 if __name__ == "__main__":
-    df = generate_load_data()
-    df.to_csv("/home/claude/energy-load-forecast/data/energy_load.csv", index=False)
+    df = process_pjm()
     print(df.head())
-    print(f"Rows: {len(df)}")
+    print(f"\nDate range: {df['timestamp'].min()} → {df['timestamp'].max()}")
+    print(f"Load range: {df['load_mw'].min():.0f} – {df['load_mw'].max():.0f} MW")
