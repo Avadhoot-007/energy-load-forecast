@@ -10,6 +10,7 @@ import plotly.express as px
 import joblib
 import os
 import io
+import copy
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, r2_score
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -146,6 +147,23 @@ PLOT_LAYOUT = dict(
     margin=dict(l=0, r=0, t=30, b=0),
 )
 
+
+def plot_layout(**overrides):
+    """
+    Merge per-chart overrides into the base PLOT_LAYOUT without
+    causing 'multiple values for keyword argument' errors.
+    Dict-valued keys (xaxis/yaxis/legend/etc) are shallow-merged;
+    everything else is replaced outright.
+    """
+    layout = copy.deepcopy(PLOT_LAYOUT)
+    for k, v in overrides.items():
+        if isinstance(v, dict) and isinstance(layout.get(k), dict):
+            layout[k].update(v)
+        else:
+            layout[k] = v
+    return layout
+
+
 # ── Carbon intensity estimate (avg US grid ~0.386 kg CO2/kWh) ────────────────
 CO2_KG_PER_MWH = 386  # kg CO2 per MWh (EPA eGRID avg)
 
@@ -264,8 +282,8 @@ if page == "📊 Dashboard":
         name="Predicted", line=dict(color="#f0883e", width=1.5, dash="dot")))
     fig.add_vline(x=now_ts, line=dict(color="#3fb950", width=1, dash="dash"),
         annotation_text="NOW", annotation_font_color="#3fb950")
-    fig.update_layout(**PLOT_LAYOUT, height=400,
-        legend=dict(orientation="h", y=1.08, x=0))
+    fig.update_layout(**plot_layout(height=400,
+        legend=dict(orientation="h", y=1.08, x=0)))
     fig.update_xaxes(title="")
     fig.update_yaxes(title="Load (MW)")
     st.plotly_chart(fig, use_container_width=True)
@@ -295,9 +313,9 @@ if page == "📊 Dashboard":
             s = hourly[hourly["day_type"] == dt]
             fig_h.add_trace(go.Scatter(x=s["hour"], y=s["load_mw"], name=dt,
                 mode="lines+markers", line=dict(color=col, width=2), marker=dict(size=4)))
-        fig_h.update_layout(**PLOT_LAYOUT, height=300,
+        fig_h.update_layout(**plot_layout(height=300,
             xaxis=dict(title="Hour", tickmode="linear", dtick=3, gridcolor="#21262d"),
-            yaxis=dict(title="Avg MW", gridcolor="#21262d"))
+            yaxis=dict(title="Avg MW", gridcolor="#21262d")))
         st.plotly_chart(fig_h, use_container_width=True)
 
     with col_b:
@@ -311,9 +329,9 @@ if page == "📊 Dashboard":
         fig_m.add_trace(go.Scatter(x=monthly["month_name"], y=monthly["max"],
             name="Peak", mode="lines+markers",
             line=dict(color="#f85149", width=2, dash="dot"), marker=dict(size=5)))
-        fig_m.update_layout(**PLOT_LAYOUT, height=300,
+        fig_m.update_layout(**plot_layout(height=300,
             xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER, gridcolor="#21262d"),
-            yaxis=dict(title="MW", gridcolor="#21262d"))
+            yaxis=dict(title="MW", gridcolor="#21262d")))
         st.plotly_chart(fig_m, use_container_width=True)
 
     # ── Feature importance ──
@@ -331,9 +349,9 @@ if page == "📊 Dashboard":
                 line=dict(width=0)
             )
         ))
-        fig_fi.update_layout(**PLOT_LAYOUT, height=320,
+        fig_fi.update_layout(**plot_layout(height=320,
             xaxis=dict(title="Importance", gridcolor="#21262d"),
-            yaxis=dict(gridcolor="rgba(0,0,0,0)"))
+            yaxis=dict(gridcolor="rgba(0,0,0,0)")))
         st.plotly_chart(fig_fi, use_container_width=True)
 
 
@@ -405,9 +423,9 @@ elif page == "🔮 What-If Forecast":
         ))
         fig_ahead.add_hline(y=p90, line=dict(color="#f85149", dash="dash", width=1),
             annotation_text="90th pctile", annotation_font_color="#f85149")
-        fig_ahead.update_layout(**PLOT_LAYOUT, height=320,
+        fig_ahead.update_layout(**plot_layout(height=320,
             xaxis=dict(title="Hours ahead", gridcolor="rgba(0,0,0,0)"),
-            yaxis=dict(title="MW", gridcolor="#21262d"))
+            yaxis=dict(title="MW", gridcolor="#21262d")))
         st.plotly_chart(fig_ahead, use_container_width=True)
 
 
@@ -440,8 +458,8 @@ elif page == "🌍 Carbon Tracker":
         x=co2_df["timestamp"], y=co2_df["co2_predicted_kg"] / 1000,
         name="Predicted CO₂ (t/h)", line=dict(color="#f0883e", width=1.5, dash="dot")
     ))
-    fig_co2.update_layout(**PLOT_LAYOUT, height=380,
-        yaxis=dict(title="CO₂ (tonnes/hour)", gridcolor="#21262d"))
+    fig_co2.update_layout(**plot_layout(height=380,
+        yaxis=dict(title="CO₂ (tonnes/hour)", gridcolor="#21262d")))
     st.plotly_chart(fig_co2, use_container_width=True)
 
     # Monthly CO2
@@ -461,9 +479,9 @@ elif page == "🌍 Carbon Tracker":
         text=[f"{v:.1f}" for v in monthly_co2["co2_kt"]],
         textposition="outside", textfont=dict(color="#8b949e", size=10)
     ))
-    fig_mco2.update_layout(**PLOT_LAYOUT, height=320,
+    fig_mco2.update_layout(**plot_layout(height=320,
         xaxis=dict(categoryorder="array", categoryarray=MONTH_ORDER),
-        yaxis=dict(title="CO₂ (Mt)", gridcolor="#21262d"))
+        yaxis=dict(title="CO₂ (Mt)", gridcolor="#21262d")))
     st.plotly_chart(fig_mco2, use_container_width=True)
 
     st.markdown("""
@@ -528,9 +546,9 @@ elif page == "💰 ROI Calculator":
         name="Total incl. Carbon ($M)", line=dict(color="#3fb950", width=2)))
     fig_roi.add_vline(x=curtail_mw, line=dict(color="#f0883e", dash="dash", width=1),
         annotation_text="Your setting", annotation_font_color="#f0883e")
-    fig_roi.update_layout(**PLOT_LAYOUT, height=320,
+    fig_roi.update_layout(**plot_layout(height=320,
         xaxis=dict(title="Curtailment (MW)", gridcolor="#21262d"),
-        yaxis=dict(title="Value ($M)", gridcolor="#21262d"))
+        yaxis=dict(title="Value ($M)", gridcolor="#21262d")))
     st.plotly_chart(fig_roi, use_container_width=True)
 
     st.markdown(f"""
@@ -565,8 +583,8 @@ elif page == "🔬 Model Diagnostics":
     fig_res.add_hline(y=mae*2, line=dict(color="#f85149", dash="dash", width=1),
         annotation_text="2×MAE", annotation_font_color="#f85149")
     fig_res.add_hline(y=-mae*2, line=dict(color="#f85149", dash="dash", width=1))
-    fig_res.update_layout(**PLOT_LAYOUT, height=320,
-        yaxis=dict(title="Prediction Error (MW)", gridcolor="#21262d"))
+    fig_res.update_layout(**plot_layout(height=320,
+        yaxis=dict(title="Prediction Error (MW)", gridcolor="#21262d")))
     st.plotly_chart(fig_res, use_container_width=True)
 
     # ── Error distribution ──
@@ -581,9 +599,9 @@ elif page == "🔬 Model Diagnostics":
         fig_hist.add_vline(x=0, line=dict(color="#3fb950", width=1.5))
         fig_hist.add_vline(x=df["error"].mean(), line=dict(color="#f0883e", dash="dash"),
             annotation_text=f"μ={df['error'].mean():.0f}", annotation_font_color="#f0883e")
-        fig_hist.update_layout(**PLOT_LAYOUT, height=300,
+        fig_hist.update_layout(**plot_layout(height=300,
             xaxis=dict(title="Error (MW)", gridcolor="#21262d"),
-            yaxis=dict(title="Count", gridcolor="#21262d"))
+            yaxis=dict(title="Count", gridcolor="#21262d")))
         st.plotly_chart(fig_hist, use_container_width=True)
 
     with col_b:
@@ -597,9 +615,9 @@ elif page == "🔬 Model Diagnostics":
                 line=dict(width=0)
             )
         ))
-        fig_herr.update_layout(**PLOT_LAYOUT, height=300,
+        fig_herr.update_layout(**plot_layout(height=300,
             xaxis=dict(title="Hour of Day", gridcolor="#21262d"),
-            yaxis=dict(title="Avg Abs Error (MW)", gridcolor="#21262d"))
+            yaxis=dict(title="Avg Abs Error (MW)", gridcolor="#21262d")))
         st.plotly_chart(fig_herr, use_container_width=True)
 
     # ── Anomaly detection ──
@@ -617,8 +635,8 @@ elif page == "🔬 Model Diagnostics":
     fig_anom.add_trace(go.Scatter(x=anomalies["timestamp"], y=anomalies["load_mw"],
         mode="markers", marker=dict(color="#f85149", size=6, symbol="x"),
         name="Anomaly"))
-    fig_anom.update_layout(**PLOT_LAYOUT, height=320,
-        yaxis=dict(title="Load (MW)", gridcolor="#21262d"))
+    fig_anom.update_layout(**plot_layout(height=320,
+        yaxis=dict(title="Load (MW)", gridcolor="#21262d")))
     st.plotly_chart(fig_anom, use_container_width=True)
 
     if len(anomalies) > 0:
