@@ -186,10 +186,25 @@ def load_predictions():
 @st.cache_resource
 def load_model():
     path = os.path.join(DATA_DIR, "model.joblib")
+    if os.path.exists(path):
+        return joblib.load(path)
+
+    # Fallback: model.joblib missing from deploy (not committed / too large
+    # for git). Train it once here so the app still works; result is cached
+    # via st.cache_resource so this only runs on cold start.
+    csv_path = os.path.join(DATA_DIR, "energy_load.csv")
+    if not os.path.exists(csv_path):
+        return None
+
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+    from train import train as train_model
+    with st.spinner("Model not found — training now (first load only)..."):
+        train_model()
     return joblib.load(path) if os.path.exists(path) else None
 
+model = load_model()   # may regenerate test_predictions.csv as a side effect
 df = load_predictions()
-model = load_model()
 
 # ── Computed metrics ──────────────────────────────────────────────────────────
 mae  = mean_absolute_error(df["load_mw"], df["predicted_load_mw"])
