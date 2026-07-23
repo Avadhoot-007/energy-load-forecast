@@ -1,6 +1,6 @@
 """
 Trains an XGBoost regressor to forecast next-hour electricity load.
-Dataset: PJM East hourly energy consumption (2002–2018), ~145k rows.
+Dataset: PJM East hourly energy consumption (2002-2018), ~145k rows.
 Run generate_data.py first to produce energy_load.csv.
 """
 import os
@@ -20,6 +20,29 @@ FEATURES = [
     "load_lag_1", "load_lag_24", "load_lag_168", "load_rolling_24"
 ]
 TARGET = "load_mw"
+
+
+def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a df with 'timestamp' and 'load_mw' columns, adds calendar
+    features plus 1h/24h lag and 24h rolling-average features, then
+    drops the resulting leading NaN rows.
+    """
+    df = df.sort_values("timestamp").reset_index(drop=True)
+
+    df["hour"] = df["timestamp"].dt.hour
+    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
+    df["day_of_year"] = df["timestamp"].dt.dayofyear
+    df["month"] = df["timestamp"].dt.month
+    df["week_of_year"] = df["timestamp"].dt.isocalendar().week.astype(int)
+
+    df["load_lag_1"] = df["load_mw"].shift(1)
+    df["load_lag_24"] = df["load_mw"].shift(24)
+    df["load_rolling_24"] = df["load_mw"].shift(1).rolling(24).mean()
+
+    df = df.dropna().reset_index(drop=True)
+    return df
 
 
 def train():
@@ -51,7 +74,7 @@ def train():
 
     print(f"MAE:  {mae:.2f} MW")
     print(f"MAPE: {mape:.2f}%")
-    print(f"R²:   {r2:.4f}")
+    print(f"R2:   {r2:.4f}")
 
     joblib.dump(model, MODEL_PATH)
 
@@ -59,8 +82,8 @@ def train():
     results["predicted_load_mw"] = preds
     results[["timestamp", "load_mw", "predicted_load_mw"]].to_csv(PREDS_PATH, index=False)
 
-    print(f"Model saved → {MODEL_PATH}")
-    print(f"Predictions saved → {PREDS_PATH}")
+    print(f"Model saved -> {MODEL_PATH}")
+    print(f"Predictions saved -> {PREDS_PATH}")
     return {"mae": mae, "mape": mape, "r2": r2}
 
 
