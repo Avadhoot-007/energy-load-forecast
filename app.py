@@ -230,11 +230,17 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("<div style='font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:0.08em;'>Live Simulation</div>", unsafe_allow_html=True)
     live_mode = st.toggle("Auto-refresh (30s)", value=False)
-    if live_mode:
+
+    @st.fragment(run_every=30)
+    def _live_refresh():
+        # Runs on its own 30s timer without blocking the main script,
+        # so the toggle above stays clickable at all times. When the
+        # toggle is switched off, this fragment simply stops firing.
         st.markdown('<div class="live-badge"><div class="live-dot"></div>LIVE</div>', unsafe_allow_html=True)
-        import time
-        time.sleep(30)
         st.rerun()
+
+    if live_mode:
+        _live_refresh()
 
     st.markdown("---")
     st.markdown("<div style='font-size:11px; color:#8b949e; text-transform:uppercase; letter-spacing:0.08em;'>Dataset</div>", unsafe_allow_html=True)
