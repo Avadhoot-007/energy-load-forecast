@@ -150,8 +150,11 @@ CO2_KG_PER_MWH = 386  # kg CO2 per MWh (EPA eGRID avg, annual baseline)
 
 # Seasonal intensity multipliers — winter gas peakers / summer AC load shift
 # the real figure away from the flat annual average (~350-420 kg/MWh per
-# app's own Carbon Tracker methodology note). Rough seasonal shape, not a
-# regional model — good enough to stop treating every month as identical.
+# app's own Carbon Tracker methodology note). These are HAND-PICKED to
+# roughly match that known seasonal shape — not fitted to real PJM eGRID
+# subregion dispatch data. Treat as illustrative, not a source of truth
+# for emissions accounting. Swapping in actual monthly eGRID subregion
+# factors (published annually by EPA) would remove this caveat.
 MONTH_CO2_MULTIPLIER = {
     1: 1.07, 2: 1.05, 3: 0.98, 4: 0.93, 5: 0.94, 6: 1.00,
     7: 1.06, 8: 1.06, 9: 0.99, 10: 0.93, 11: 0.96, 12: 1.06,
@@ -517,9 +520,12 @@ elif page == "🌍 Carbon Tracker":
     <b style='color:#e6edf3;'>Methodology note</b><br>
     CO₂ estimates start from the EPA eGRID 2022 average US grid intensity (386 kg CO₂/MWh)
     and apply a fixed monthly multiplier (~0.93–1.07×) to roughly capture winter gas-peaker
-    and summer AC load shifts. This is still a national average shape, not an hourly or
-    regional dispatch model — PJM's actual intensity varies ~350–420 kg/MWh by season and
-    by what's on the margin (gas vs. coal vs. renewables) at any given hour.
+    and summer AC load shifts. <b>These multipliers are hand-picked to approximate a known
+    seasonal shape, not fitted to real PJM eGRID subregion data</b> — treat this as
+    illustrative, not an emissions-accounting-grade figure. PJM's actual intensity varies
+    ~350–420 kg/MWh by season and by what's on the margin (gas vs. coal vs. renewables) at
+    any given hour; a real deployment should pull published monthly eGRID subregion factors
+    instead of this static table.
     </div>
     """, unsafe_allow_html=True)
 
