@@ -44,25 +44,6 @@ section[data-testid="stSidebar"] {
 }
 section[data-testid="stSidebar"] * { color: #e6edf3 !important; }
 
-/* KPI Cards */
-.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-.kpi-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 8px;
-    padding: 18px 20px;
-    position: relative;
-    overflow: hidden;
-}
-.kpi-card::before {
-    content: '';
-    position: absolute; top: 0; left: 0; right: 0; height: 2px;
-    background: linear-gradient(90deg, #58a6ff, #3fb950);
-}
-.kpi-label { font-size: 11px; color: #8b949e; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
-.kpi-value { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #58a6ff; }
-.kpi-delta { font-size: 12px; color: #3fb950; margin-top: 4px; }
-
 /* Section headers */
 .section-header {
     font-family: 'JetBrains Mono', monospace;
@@ -165,7 +146,21 @@ def plot_layout(**overrides):
 
 
 # ── Carbon intensity estimate (avg US grid ~0.386 kg CO2/kWh) ────────────────
-CO2_KG_PER_MWH = 386  # kg CO2 per MWh (EPA eGRID avg)
+CO2_KG_PER_MWH = 386  # kg CO2 per MWh (EPA eGRID avg, annual baseline)
+
+# Seasonal intensity multipliers — winter gas peakers / summer AC load shift
+# the real figure away from the flat annual average (~350-420 kg/MWh per
+# app's own Carbon Tracker methodology note). Rough seasonal shape, not a
+# regional model — good enough to stop treating every month as identical.
+MONTH_CO2_MULTIPLIER = {
+    1: 1.07, 2: 1.05, 3: 0.98, 4: 0.93, 5: 0.94, 6: 1.00,
+    7: 1.06, 8: 1.06, 9: 0.99, 10: 0.93, 11: 0.96, 12: 1.06,
+}
+
+FEATURES = [
+    "hour", "day_of_week", "is_weekend", "day_of_year", "month", "week_of_year",
+    "load_lag_1", "load_lag_24", "load_lag_168", "load_rolling_24"
+]
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 @st.cache_data
@@ -179,8 +174,9 @@ def load_predictions():
     df["month_name"] = df["timestamp"].dt.strftime("%b")
     df["error"] = df["predicted_load_mw"] - df["load_mw"]
     df["abs_error"] = df["error"].abs()
-    df["co2_actual_kg"] = df["load_mw"] * CO2_KG_PER_MWH
-    df["co2_predicted_kg"] = df["predicted_load_mw"] * CO2_KG_PER_MWH
+    co2_factor = df["month"].map(MONTH_CO2_MULTIPLIER) * CO2_KG_PER_MWH
+    df["co2_actual_kg"] = df["load_mw"] * co2_factor
+    df["co2_predicted_kg"] = df["predicted_load_mw"] * co2_factor
     return df
 
 @st.cache_resource
@@ -234,10 +230,11 @@ with st.sidebar:
     @st.fragment(run_every=30)
     def _live_refresh():
         # Runs on its own 30s timer without blocking the main script,
-        # so the toggle above stays clickable at all times. When the
-        # toggle is switched off, this fragment simply stops firing.
+        # so the toggle above stays clickable at all times. Fragments
+        # already rerun themselves on the timer — do NOT call st.rerun()
+        # here, that forces a full-app rerun and defeats the point of
+        # using a fragment in the first place.
         st.markdown('<div class="live-badge"><div class="live-dot"></div>LIVE</div>', unsafe_allow_html=True)
-        st.rerun()
 
     if live_mode:
         _live_refresh()
@@ -358,8 +355,6 @@ if page == "📊 Dashboard":
     # ── Feature importance ──
     if model is not None:
         st.markdown('<div class="section-header">Feature Importance</div>', unsafe_allow_html=True)
-        FEATURES = ["hour","day_of_week","is_weekend","day_of_year","month","week_of_year",
-                    "load_lag_1","load_lag_24","load_lag_168","load_rolling_24"]
         fi_df = pd.DataFrame({"Feature": FEATURES, "Importance": model.feature_importances_})
         fi_df = fi_df.sort_values("Importance")
         fig_fi = go.Figure(go.Bar(
@@ -404,10 +399,22 @@ elif page == "🔮 What-If Forecast":
             lag_168 = st.number_input("Load 168h ago (MW)", 20000, 65000, ref_load)
             roll_24 = st.number_input("24h rolling avg (MW)", 20000, 65000, ref_load)
 
-        features = [[hour, day_of_week, is_weekend, day_of_year, month, week_of_year,
-                     lag_1, lag_24, lag_168, roll_24]]
+        def make_features_row(h, dow, weekend, doy, mo, woy, l1, l24, l168, r24):
+            # DataFrame with named columns — model was trained on named
+            # columns, predicting from a raw list risks silent column-order
+            # bugs / XGBoost feature-name warnings if FEATURES order changes.
+            return pd.DataFrame([{
+                "hour": h, "day_of_week": dow, "is_weekend": weekend,
+                "day_of_year": doy, "month": mo, "week_of_year": woy,
+                "load_lag_1": l1, "load_lag_24": l24, "load_lag_168": l168,
+                "load_rolling_24": r24,
+            }])[FEATURES]
+
+        features = make_features_row(hour, day_of_week, is_weekend, day_of_year,
+                                      month, week_of_year, lag_1, lag_24, lag_168, roll_24)
         pred = float(model.predict(features)[0])
-        co2  = pred * CO2_KG_PER_MWH / 1000  # tonnes
+        co2_intensity = MONTH_CO2_MULTIPLIER.get(month, 1.0) * CO2_KG_PER_MWH
+        co2  = pred * co2_intensity / 1000  # tonnes
 
         p90  = float(df["load_mw"].quantile(0.9))
         is_peak = pred > p90
@@ -428,8 +435,8 @@ elif page == "🔮 What-If Forecast":
         hours_ahead = list(range(1, 7))
         ahead_preds = []
         for h in hours_ahead:
-            f = [[( hour + h) % 24, day_of_week, is_weekend, day_of_year, month,
-                   week_of_year, lag_1, lag_24, lag_168, roll_24]]
+            f = make_features_row((hour + h) % 24, day_of_week, is_weekend, day_of_year,
+                                   month, week_of_year, lag_1, lag_24, lag_168, roll_24)
             ahead_preds.append(float(model.predict(f)[0]))
 
         fig_ahead = go.Figure()
@@ -455,7 +462,7 @@ elif page == "🔮 What-If Forecast":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "🌍 Carbon Tracker":
     st.markdown("<h1 style='font-family: JetBrains Mono, monospace; font-size: 24px; font-weight: 600; color: #e6edf3;'>Carbon Intensity Tracker</h1>", unsafe_allow_html=True)
-    st.caption(f"Estimated CO₂ at {CO2_KG_PER_MWH} kg/MWh (EPA eGRID average US grid intensity)")
+    st.caption(f"Estimated CO₂ using a seasonally-adjusted EPA eGRID baseline ({CO2_KG_PER_MWH} kg/MWh avg)")
 
     n_hours_c = st.slider("Hours to display", 24, 24 * 30, 24 * 7, key="co2_slider")
     co2_df = df.tail(n_hours_c).copy()
@@ -508,9 +515,11 @@ elif page == "🌍 Carbon Tracker":
     st.markdown("""
     <div style='background:#161b22; border:1px solid #21262d; border-radius:8px; padding:16px; font-size:13px; color:#8b949e; margin-top:8px;'>
     <b style='color:#e6edf3;'>Methodology note</b><br>
-    CO₂ estimates use EPA eGRID 2022 average US grid intensity (386 kg CO₂/MWh).
-    Real carbon intensity varies by hour and region — winter gas peakers and summer AC load shift the figure.
-    This is a conservative estimate for illustration; PJM's actual intensity is ~350–420 kg/MWh depending on season.
+    CO₂ estimates start from the EPA eGRID 2022 average US grid intensity (386 kg CO₂/MWh)
+    and apply a fixed monthly multiplier (~0.93–1.07×) to roughly capture winter gas-peaker
+    and summer AC load shifts. This is still a national average shape, not an hourly or
+    regional dispatch model — PJM's actual intensity varies ~350–420 kg/MWh by season and
+    by what's on the margin (gas vs. coal vs. renewables) at any given hour.
     </div>
     """, unsafe_allow_html=True)
 
@@ -538,8 +547,16 @@ elif page == "💰 ROI Calculator":
     # Compute
     p90 = df["predicted_load_mw"].quantile(0.9)
     peak_hrs_total = int((df["predicted_load_mw"] > p90).sum())
-    peak_hrs_year  = peak_hrs_total  # test set ≈ full year proportional
-    activated_hrs  = peak_hrs_year * (dr_hours_pct / 100) * (months / 12)
+
+    # Annualize using the ACTUAL span of the test set, not an assumed year.
+    # test_size=0.2 with shuffle=False means the test set is whatever
+    # calendar span the last 20% of rows happens to cover — for ~16 years
+    # of PJM data that's roughly 3 years, not 1. Dividing by the real span
+    # (in years) avoids inflating peak-hour counts by ~3x.
+    span_days = (df["timestamp"].max() - df["timestamp"].min()).days
+    span_years = max(span_days / 365.25, 1 / 365.25)  # guard against 0
+    peak_hrs_per_year = peak_hrs_total / span_years
+    activated_hrs = peak_hrs_per_year * (dr_hours_pct / 100) * (months / 12)
 
     energy_saved_mwh = curtail_mw * n_sites * activated_hrs
     revenue_usd      = energy_saved_mwh * price_mwh
@@ -576,7 +593,8 @@ elif page == "💰 ROI Calculator":
     <div style='background:#161b22; border:1px solid #21262d; border-radius:8px; padding:16px; font-size:13px; color:#8b949e; margin-top:8px;'>
     <b style='color:#e6edf3;'>Assumptions</b><br>
     Peak hours defined as predicted load &gt; 90th percentile ({p90:,.0f} MW).
-    {peak_hrs_total:,} peak hours identified in test set.
+    {peak_hrs_total:,} peak hours identified across the {span_years:.1f}-year test window
+    (~{peak_hrs_per_year:,.0f}/year), then scaled to the {months}-month analysis period.
     Revenue = curtailed MWh × peak price. Carbon value = CO₂ avoided × carbon price.
     Does not account for DR program participation costs or rebound load.
     </div>
