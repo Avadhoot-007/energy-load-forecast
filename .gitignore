@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .DS_Store
+
+# Large / generated data — regenerate locally via:
+#   python src/generate_data.py && python src/train.py
+data/PJME_hourly.csv
+data/energy_load.csv
+data/model.joblib
+data/test_predictions.csv
