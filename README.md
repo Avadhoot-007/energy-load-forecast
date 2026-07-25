@@ -18,11 +18,20 @@ and flags predicted peak-demand hours for demand-response action.
 
 ## Results
 
+Chronological 70/15/15 train/validation/test split. Early stopping watches
+the validation set only; the metrics below are scored on the held-out test
+set the model never saw during training or stopping.
+
 | Metric | Value  |
 | ------ | ------ |
 | MAE    | ~85 MW |
 | MAPE   | ~2.7%  |
 | R²     | ~0.94  |
+
+Re-run `python src/train.py` after this change — these numbers were
+previously measured with the test set doubling as the early-stopping eval
+set, which leaks test-set signal into the stopping point. Expect the
+re-trained numbers to shift slightly.
 
 ## Tech Stack
 
@@ -79,8 +88,8 @@ calendar and lag structure only. Adding temperature is a natural next step
 - Integrate renewable generation forecast (solar/wind offset)
 - Deploy as REST API (AWS Lambda, free tier)
 - Real-time SMS/push demand-response alerts
-- Proper train/val/test split for hyperparameter tuning without test-set leakage
+- Replace hand-picked seasonal CO₂ multipliers with real EPA eGRID subregion factors
 
 ## Author
 
-Solo project — 1M1B Applied AI for Climate Action internship.
+Avadhoot Tople - Solo project — 1M1B Applied AI for Climate Action internship.
