@@ -247,7 +247,7 @@ with st.sidebar:
     st.markdown(f"<div style='font-size:12px; color:#e6edf3; margin-top:6px;'>PJM East · 2002–2018<br>{len(df):,} test rows</div>", unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("<div style='font-size:10px; color:#8b949e;'>1M1B Applied AI for Climate Action</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:10px; color:#8b949e;'>Avadhoot Tople - for 1M1B Applied AI for Climate Action</div>", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — DASHBOARD
